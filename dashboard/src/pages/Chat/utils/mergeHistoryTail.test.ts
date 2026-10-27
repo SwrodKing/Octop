@@ -61,6 +61,36 @@ describe("mergeHistoryWithLocalTail", () => {
     );
   });
 
+  it("does not replay a finished turn when the browser clock is ahead", () => {
+    const loaded = [
+      msg("old-a", "assistant", "之前的回复", 1_000),
+      msg("srv-user", "user", "帮我画一张股权交易的流程图", 5_000),
+      msg("srv-a", "assistant", "做好了", 5_200),
+    ];
+    const current = [
+      msg("local-user", "user", "帮我画一张股权交易的流程图", 20_000),
+      msg("local-a", "assistant", "帮我画一张股权交易的流程图", 20_100),
+    ];
+    expect(mergeHistoryWithLocalTail(loaded, current).map((m) => m.id)).toEqual(
+      ["old-a", "srv-user", "srv-a"],
+    );
+  });
+
+  it("keeps a second identical send the server page does not have yet", () => {
+    const loaded = [
+      msg("srv-user", "user", "继续做", 5_000),
+      msg("srv-a", "assistant", "第一次", 5_200),
+    ];
+    const current = [
+      msg("local-user-1", "user", "继续做", 5_000),
+      msg("local-a", "assistant", "第一次", 5_100),
+      msg("local-user-2", "user", "继续做", 20_000),
+    ];
+    expect(mergeHistoryWithLocalTail(loaded, current).map((m) => m.id)).toEqual(
+      ["srv-user", "srv-a", "local-user-2"],
+    );
+  });
+
   it("keeps older pages already prepended above the latest server page", () => {
     const loaded = [msg("m2", "user", "第二页", 2_000)];
     const current = [

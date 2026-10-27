@@ -18,27 +18,37 @@ function inFlightTail(current: ChatMessage[]): ChatMessage[] {
   return current.slice(idx);
 }
 
+function countUserText(messages: ChatMessage[], text: string): number {
+  let count = 0;
+  for (const message of messages) {
+    if (message.role === "user" && textOf(message) === text) count += 1;
+  }
+  return count;
+}
+
 /**
  * True when `base` already ends with this local turn (server persisted it
- * under different ids). A later send of the same text is kept.
+ * under different ids).
+ *
+ * A later send of the same words is kept only when the local list contains
+ * more copies than the server page. Comparing clocks treated that finished
+ * turn as a new send whenever the browser was more than a second ahead, and
+ * the local bubbles were appended under the saved reply.
  */
 function sameTurnAlreadyLoaded(
   base: ChatMessage[],
   tail: ChatMessage[],
+  current: ChatMessage[],
+  loaded: ChatMessage[],
 ): boolean {
   const tailUserIdx = lastUserIndex(tail);
   if (tailUserIdx < 0) return false;
-  const tailUser = tail[tailUserIdx];
-  const tailText = textOf(tailUser);
+  const tailText = textOf(tail[tailUserIdx]);
   if (!tailText) return false;
   const baseUserIdx = lastUserIndex(base);
   if (baseUserIdx < 0) return false;
-  const baseUser = base[baseUserIdx];
-  if (textOf(baseUser) !== tailText) return false;
-  const baseTs = baseUser.timestamp || 0;
-  const tailTs = tailUser.timestamp || 0;
-  if (baseTs > 0 && tailTs > baseTs + 1000) return false;
-  return true;
+  if (textOf(base[baseUserIdx]) !== tailText) return false;
+  return countUserText(current, tailText) <= countUserText(loaded, tailText);
 }
 
 /**
@@ -63,7 +73,7 @@ export function mergeHistoryWithLocalTail(
 
   if (firstOverlap < 0) {
     const tail = inFlightTail(current);
-    if (sameTurnAlreadyLoaded(loaded, tail)) return loaded;
+    if (sameTurnAlreadyLoaded(loaded, tail, current, loaded)) return loaded;
     return [...loaded, ...tail];
   }
 
@@ -84,6 +94,7 @@ export function mergeHistoryWithLocalTail(
   const loadedOverlap = loaded.findIndex((message) => message.id === overlapId);
   const serverAfter = loadedOverlap >= 0 ? loaded.slice(loadedOverlap + 1) : [];
   if (serverAfter.length === 0) return [...base, ...localTail];
-  if (sameTurnAlreadyLoaded(serverAfter, localTail)) return base;
+  if (sameTurnAlreadyLoaded(serverAfter, localTail, current, loaded))
+    return base;
   return [...base, ...localTail];
 }
