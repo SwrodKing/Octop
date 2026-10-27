@@ -1,9 +1,5 @@
 import type { ChatMessage } from "../hooks/sseHelpers";
 
-function textOf(message: ChatMessage): string {
-  return (message.content || "").trim();
-}
-
 function lastUserIndex(messages: ChatMessage[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === "user") return i;
@@ -18,41 +14,20 @@ function inFlightTail(current: ChatMessage[]): ChatMessage[] {
   return current.slice(idx);
 }
 
-function countUserText(messages: ChatMessage[], text: string): number {
-  let count = 0;
-  for (const message of messages) {
-    if (message.role === "user" && textOf(message) === text) count += 1;
-  }
-  return count;
-}
-
-/**
- * True when `base` already ends with this local turn (server persisted it
- * under different ids).
- *
- * A later send of the same words is kept only when the local list contains
- * more copies than the server page. Comparing clocks treated that finished
- * turn as a new send whenever the browser was more than a second ahead, and
- * the local bubbles were appended under the saved reply.
- */
-function sameTurnAlreadyLoaded(
-  base: ChatMessage[],
-  tail: ChatMessage[],
-  current: ChatMessage[],
-  loaded: ChatMessage[],
-): boolean {
-  const tailUserIdx = lastUserIndex(tail);
-  if (tailUserIdx < 0) return false;
-  const tailText = textOf(tail[tailUserIdx]);
-  if (!tailText) return false;
-  const baseUserIdx = lastUserIndex(base);
-  if (baseUserIdx < 0) return false;
-  if (textOf(base[baseUserIdx]) !== tailText) return false;
-  return countUserText(current, tailText) <= countUserText(loaded, tailText);
+/** Index of a user message in `tail` whose id the server page does not have. */
+function newSendIndex(tail: ChatMessage[], loadedIds: Set<string>): number {
+  return tail.findIndex(
+    (message) => message.role === "user" && !loadedIds.has(message.id),
+  );
 }
 
 /**
  * Apply a server history page without dropping a turn the user just sent.
+ *
+ * The dashboard send stores the optimistic user id on the checkpoint
+ * HumanMessage. A finished turn therefore shares that id with the server
+ * page, and the local bubbles are dropped once the reply is there too.
+ * A later send keeps its own id until that row is stored.
  *
  * Opening an old thread fetches history before the optimistic bubble exists.
  * The response then replaces the list and the bubble vanishes, while the
@@ -72,9 +47,9 @@ export function mergeHistoryWithLocalTail(
   );
 
   if (firstOverlap < 0) {
-    const tail = inFlightTail(current);
-    if (sameTurnAlreadyLoaded(loaded, tail, current, loaded)) return loaded;
-    return [...loaded, ...tail];
+    // This page does not contain the optimistic user id, so the turn is not
+    // stored here yet.
+    return [...loaded, ...inFlightTail(current)];
   }
 
   let lastOverlap = firstOverlap;
@@ -90,11 +65,13 @@ export function mergeHistoryWithLocalTail(
   const base = [...olderPrefix, ...loaded];
   if (localTail.length === 0) return base;
 
+  const freshSend = newSendIndex(localTail, loadedIds);
+  if (freshSend >= 0) return [...base, ...localTail.slice(freshSend)];
+
   const overlapId = current[lastOverlap].id;
   const loadedOverlap = loaded.findIndex((message) => message.id === overlapId);
   const serverAfter = loadedOverlap >= 0 ? loaded.slice(loadedOverlap + 1) : [];
+  // User row is stored and the reply is not in this page yet.
   if (serverAfter.length === 0) return [...base, ...localTail];
-  if (sameTurnAlreadyLoaded(serverAfter, localTail, current, loaded))
-    return base;
-  return [...base, ...localTail];
+  return base;
 }

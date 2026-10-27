@@ -931,6 +931,7 @@ export function useChat(
         reasoningEffort,
         conversationMode,
         hitlPolicy,
+        userMsg.id,
       );
     },
     [stableSessionId],

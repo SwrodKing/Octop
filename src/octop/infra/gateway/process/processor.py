@@ -119,7 +119,12 @@ def _overwrite_last_user_text(request: dict[str, Any], text: str) -> None:
         return
     extra = getattr(last, "additional_kwargs", None)
     kwargs = dict(extra) if isinstance(extra, dict) else {}
-    messages[-1] = HumanMessage(content=text, additional_kwargs=kwargs)
+    kept_id = getattr(last, "id", None)
+    messages[-1] = HumanMessage(
+        content=text,
+        additional_kwargs=kwargs,
+        **({"id": kept_id} if isinstance(kept_id, str) and kept_id else {}),
+    )
 
 
 class _MessageEventSink(SlashSink):
@@ -1482,6 +1487,7 @@ class GlobalProcessor:
                 if built:
                     message_kwargs[COMPOSER_CTX_KEY] = built
 
+        client_message_id = meta.get("client_message_id")
         request = build_harness_request(
             thread_id=thread_id,
             user_id=user_id,
@@ -1493,6 +1499,7 @@ class GlobalProcessor:
             auto_route=model_route.automatic,
             message_kwargs=message_kwargs or None,
             reasoning_overrides=reasoning_overrides,
+            message_id=client_message_id if isinstance(client_message_id, str) else None,
         )
         self.teams.stamp_host_runtime(request, agent_id)
         self._attach_turn_knowledge_config(

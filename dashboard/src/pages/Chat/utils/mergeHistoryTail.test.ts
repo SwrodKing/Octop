@@ -31,18 +31,29 @@ describe("mergeHistoryWithLocalTail", () => {
     );
   });
 
-  it("does not duplicate a turn the server already stored under new ids", () => {
+  it("drops the live bubbles once the stored user id has a reply", () => {
     const loaded = [
       msg("old-a", "assistant", "之前的回复", 1_000),
-      msg("srv-user", "user", "继续做", 5_000),
+      msg("local-user", "user", "继续做", 5_000),
       msg("srv-a", "assistant", "做好了", 5_200),
     ];
     const current = [
-      msg("local-user", "user", "继续做", 5_000),
-      msg("local-a", "assistant", "做好了", 5_100),
+      msg("local-user", "user", "继续做", 20_000),
+      msg("local-a", "assistant", "做好了", 20_100),
     ];
     expect(mergeHistoryWithLocalTail(loaded, current).map((m) => m.id)).toEqual(
-      ["old-a", "srv-user", "srv-a"],
+      ["old-a", "local-user", "srv-a"],
+    );
+  });
+
+  it("keeps the live reply when the user row is stored and the answer is not", () => {
+    const loaded = [msg("local-user", "user", "继续做", 5_000)];
+    const current = [
+      msg("local-user", "user", "继续做", 20_000),
+      msg("local-a", "assistant", "正在处理", 20_100),
+    ];
+    expect(mergeHistoryWithLocalTail(loaded, current).map((m) => m.id)).toEqual(
+      ["local-user", "local-a"],
     );
   });
 
@@ -64,7 +75,7 @@ describe("mergeHistoryWithLocalTail", () => {
   it("does not replay a finished turn when the browser clock is ahead", () => {
     const loaded = [
       msg("old-a", "assistant", "之前的回复", 1_000),
-      msg("srv-user", "user", "帮我画一张股权交易的流程图", 5_000),
+      msg("local-user", "user", "帮我画一张股权交易的流程图", 5_000),
       msg("srv-a", "assistant", "做好了", 5_200),
     ];
     const current = [
@@ -72,7 +83,7 @@ describe("mergeHistoryWithLocalTail", () => {
       msg("local-a", "assistant", "帮我画一张股权交易的流程图", 20_100),
     ];
     expect(mergeHistoryWithLocalTail(loaded, current).map((m) => m.id)).toEqual(
-      ["old-a", "srv-user", "srv-a"],
+      ["old-a", "local-user", "srv-a"],
     );
   });
 

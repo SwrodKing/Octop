@@ -2836,6 +2836,7 @@ async function sendTurnWebSocket(
   reasoningEffort?: string | null,
   conversationMode?: "ask" | "plan" | "craft" | null,
   hitlPolicy?: { mode: string; tools?: string[] } | null,
+  clientMessageId?: string | null,
 ): Promise<boolean> {
   const state = getOrCreate(sessionId);
   const resolvedThreadId = (threadId || sessionId).trim();
@@ -2895,6 +2896,7 @@ async function sendTurnWebSocket(
           {
             role: "user",
             content: messageContent,
+            ...(clientMessageId ? { id: clientMessageId } : {}),
           },
         ],
       };
@@ -3092,6 +3094,7 @@ export async function sendTurn(
   reasoningEffort?: string | null,
   conversationMode?: "ask" | "plan" | "craft" | null,
   hitlPolicy?: { mode: string; tools?: string[] } | null,
+  clientMessageId?: string | null,
 ): Promise<void> {
   const state = getOrCreate(sessionId);
   rememberRoomAgent(state, agentId);
@@ -3180,6 +3183,7 @@ export async function sendTurn(
     reasoningEffort,
     conversationMode,
     hitlPolicy,
+    clientMessageId,
   );
   if (!wsOk) {
     state.messages = [
